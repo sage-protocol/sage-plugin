@@ -1,6 +1,6 @@
 {
   "name": "@sage-protocol/scroll-plugin",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "OpenCode plugin for Scroll: capture + suggest in one module",
   "main": "index.js",
   "type": "module",

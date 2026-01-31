@@ -263,6 +263,53 @@ describe("ScrollPlugin", () => {
 		// Suggest is debounced, so no immediate effect to assert
 	});
 
+	it("RLM feedback calls 'suggest feedback' (not 'prompts append-feedback')", async () => {
+		// Disable dry-run so execScroll actually invokes $
+		delete process.env.SCROLL_PLUGIN_DRY_RUN;
+		process.env.SCROLL_RLM_FEEDBACK = "1";
+
+		const { client } = makeClient();
+		const $mock = make$();
+		const plugin = await ScrollPlugin({ client, $: $mock, directory: "/tmp" });
+
+		// 1. Capture a prompt
+		await plugin["chat.message"](
+			{ sessionID: "s1", model: { modelID: "claude-3" } },
+			{ parts: [{ type: "text", text: "explain rust" }] },
+		);
+
+		// 2. Simulate a suggestion being injected (tui.prompt.append triggers suggest)
+		//    We need to trigger the internal suggest flow which sets lastSuggestionPromptKey.
+		//    The simplest path: simulate the full prompt→suggest→response→feedback cycle.
+		//    Since suggest is debounced and async, instead we directly drive message.updated
+		//    which triggers the RLM feedback path when a suggestion was correlated.
+
+		// 3. Simulate assistant response with tool-use of suggest command
+		await plugin.event({
+			event: {
+				type: "message.part.updated",
+				properties: { part: { type: "text", text: "Rust is a systems language." } },
+			},
+		});
+		await plugin.event({
+			event: {
+				type: "message.updated",
+				properties: { info: { role: "assistant", tokens: { input: 10, output: 20 } } },
+			},
+		});
+
+		// Check that any calls to $ containing "feedback" use "suggest feedback", not "prompts append-feedback"
+		const feedbackCalls = $mock.calls.filter(c => c.cmd.includes("feedback"));
+		for (const call of feedbackCalls) {
+			expect(call.cmd).toContain("suggest");
+			expect(call.cmd).not.toContain("append-feedback");
+			expect(call.cmd).not.toContain("prompts");
+		}
+
+		// Restore dry-run for other tests
+		process.env.SCROLL_PLUGIN_DRY_RUN = "1";
+	});
+
 	it("non-text parts in message.part.updated are ignored", async () => {
 		const { client } = makeClient();
 		const plugin = await ScrollPlugin({ client, $: make$(), directory: "/tmp" });

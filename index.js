@@ -111,7 +111,7 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 			await log("debug", "appending RLM feedback", { promptKey, feedback: feedbackEntry });
 			
 			const result = await execScroll([
-				"prompts", "append-feedback",
+				"suggest", "feedback",
 				promptKey,
 				feedbackEntry,
 				"--source", "opencode-plugin"

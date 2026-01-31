@@ -1,9 +1,9 @@
-import { describe, expect, it, beforeEach } from "bun:test";
-import ScrollPlugin from "./index.js";
+import { beforeEach, describe, expect, it } from "bun:test";
+import SagePlugin from "./index.js";
 
-describe("ScrollPlugin", () => {
+describe("SagePlugin", () => {
 	beforeEach(() => {
-		process.env.SCROLL_PLUGIN_DRY_RUN = "1";
+		process.env.SAGE_PLUGIN_DRY_RUN = "1";
 	});
 
 	const makeClient = () => {
@@ -15,7 +15,9 @@ describe("ScrollPlugin", () => {
 					log: ({ level, message, extra }) =>
 						appLogCalls.push({ level, message, extra }),
 				},
-				tui: { appendPrompt: ({ body }) => promptAppends.push(body?.text ?? "") },
+				tui: {
+					appendPrompt: ({ body }) => promptAppends.push(body?.text ?? ""),
+				},
 			},
 			appLogCalls,
 			promptAppends,
@@ -26,7 +28,10 @@ describe("ScrollPlugin", () => {
 		const calls = [];
 		const shell = (opts) => {
 			return (strings, ...values) => {
-				const cmd = strings.reduce((acc, str, i) => acc + str + (values[i] ?? ""), "");
+				const cmd = strings.reduce(
+					(acc, str, i) => acc + str + (values[i] ?? ""),
+					"",
+				);
 				calls.push({ cmd, env: opts?.env });
 				return { stdout: "" };
 			};
@@ -37,7 +42,11 @@ describe("ScrollPlugin", () => {
 
 	it("returns event handler and chat.message hook", async () => {
 		const { client } = makeClient();
-		const plugin = await ScrollPlugin({ client, $: make$(), directory: "/tmp" });
+		const plugin = await SagePlugin({
+			client,
+			$: make$(),
+			directory: "/tmp",
+		});
 
 		expect(typeof plugin.event).toBe("function");
 		expect(typeof plugin["chat.message"]).toBe("function");
@@ -46,10 +55,13 @@ describe("ScrollPlugin", () => {
 	it("chat.message hook captures prompt with session/model env vars", async () => {
 		const { client } = makeClient();
 		const $mock = make$();
-		const plugin = await ScrollPlugin({ client, $: $mock, directory: "/tmp" });
+		const plugin = await SagePlugin({ client, $: $mock, directory: "/tmp" });
 
 		await plugin["chat.message"](
-			{ sessionID: "sess-abc", model: { providerID: "anthropic", modelID: "claude-3" } },
+			{
+				sessionID: "sess-abc",
+				model: { providerID: "anthropic", modelID: "claude-3" },
+			},
 			{ message: {}, parts: [{ type: "text", text: "hello world" }] },
 		);
 
@@ -59,7 +71,11 @@ describe("ScrollPlugin", () => {
 
 	it("chat.message hook ignores empty parts", async () => {
 		const { client } = makeClient();
-		const plugin = await ScrollPlugin({ client, $: make$(), directory: "/tmp" });
+		const plugin = await SagePlugin({
+			client,
+			$: make$(),
+			directory: "/tmp",
+		});
 
 		// Should not throw or set promptCaptured
 		await plugin["chat.message"](
@@ -78,7 +94,11 @@ describe("ScrollPlugin", () => {
 
 	it("message.part.updated accumulates assistant text parts", async () => {
 		const { client } = makeClient();
-		const plugin = await ScrollPlugin({ client, $: make$(), directory: "/tmp" });
+		const plugin = await SagePlugin({
+			client,
+			$: make$(),
+			directory: "/tmp",
+		});
 
 		// First capture a prompt via chat.message hook
 		await plugin["chat.message"](
@@ -90,13 +110,27 @@ describe("ScrollPlugin", () => {
 		await plugin.event({
 			event: {
 				type: "message.part.updated",
-				properties: { part: { type: "text", text: "Rust is ", sessionID: "s1", messageID: "m1" } },
+				properties: {
+					part: {
+						type: "text",
+						text: "Rust is ",
+						sessionID: "s1",
+						messageID: "m1",
+					},
+				},
 			},
 		});
 		await plugin.event({
 			event: {
 				type: "message.part.updated",
-				properties: { part: { type: "text", text: "a systems language.", sessionID: "s1", messageID: "m1" } },
+				properties: {
+					part: {
+						type: "text",
+						text: "a systems language.",
+						sessionID: "s1",
+						messageID: "m1",
+					},
+				},
 			},
 		});
 
@@ -120,7 +154,11 @@ describe("ScrollPlugin", () => {
 
 	it("message.updated ignores non-assistant roles", async () => {
 		const { client } = makeClient();
-		const plugin = await ScrollPlugin({ client, $: make$(), directory: "/tmp" });
+		const plugin = await SagePlugin({
+			client,
+			$: make$(),
+			directory: "/tmp",
+		});
 
 		await plugin["chat.message"](
 			{ sessionID: "s1" },
@@ -146,14 +184,20 @@ describe("ScrollPlugin", () => {
 		await plugin.event({
 			event: {
 				type: "message.updated",
-				properties: { info: { role: "assistant", tokens: { input: 1, output: 2 } } },
+				properties: {
+					info: { role: "assistant", tokens: { input: 1, output: 2 } },
+				},
 			},
 		});
 	});
 
 	it("session.created resets state and tracks session ID", async () => {
 		const { client, appLogCalls } = makeClient();
-		const plugin = await ScrollPlugin({ client, $: make$(), directory: "/tmp" });
+		const plugin = await SagePlugin({
+			client,
+			$: make$(),
+			directory: "/tmp",
+		});
 
 		// Capture a prompt first
 		await plugin["chat.message"](
@@ -165,7 +209,13 @@ describe("ScrollPlugin", () => {
 		await plugin.event({
 			event: {
 				type: "session.created",
-				properties: { info: { id: "new-session-123", parentID: null, directory: "/project" } },
+				properties: {
+					info: {
+						id: "new-session-123",
+						parentID: null,
+						directory: "/project",
+					},
+				},
 			},
 		});
 
@@ -177,7 +227,11 @@ describe("ScrollPlugin", () => {
 
 	it("session.created detects subagent via parentID", async () => {
 		const { client, appLogCalls } = makeClient();
-		const plugin = await ScrollPlugin({ client, $: make$(), directory: "/tmp" });
+		const plugin = await SagePlugin({
+			client,
+			$: make$(),
+			directory: "/tmp",
+		});
 
 		await plugin.event({
 			event: {
@@ -192,7 +246,11 @@ describe("ScrollPlugin", () => {
 
 	it("multiple prompt-response cycles work correctly", async () => {
 		const { client } = makeClient();
-		const plugin = await ScrollPlugin({ client, $: make$(), directory: "/tmp" });
+		const plugin = await SagePlugin({
+			client,
+			$: make$(),
+			directory: "/tmp",
+		});
 
 		// Cycle 1
 		await plugin["chat.message"](
@@ -208,7 +266,9 @@ describe("ScrollPlugin", () => {
 		await plugin.event({
 			event: {
 				type: "message.updated",
-				properties: { info: { role: "assistant", tokens: { input: 5, output: 10 } } },
+				properties: {
+					info: { role: "assistant", tokens: { input: 5, output: 10 } },
+				},
 			},
 		});
 
@@ -226,7 +286,9 @@ describe("ScrollPlugin", () => {
 		await plugin.event({
 			event: {
 				type: "message.updated",
-				properties: { info: { role: "assistant", tokens: { input: 8, output: 15 } } },
+				properties: {
+					info: { role: "assistant", tokens: { input: 8, output: 15 } },
+				},
 			},
 		});
 
@@ -235,7 +297,11 @@ describe("ScrollPlugin", () => {
 
 	it("handles missing/null properties gracefully", async () => {
 		const { client } = makeClient();
-		const plugin = await ScrollPlugin({ client, $: make$(), directory: "/tmp" });
+		const plugin = await SagePlugin({
+			client,
+			$: make$(),
+			directory: "/tmp",
+		});
 
 		// chat.message with null parts
 		await plugin["chat.message"](null, null);
@@ -243,7 +309,9 @@ describe("ScrollPlugin", () => {
 		await plugin["chat.message"]({}, { parts: [] });
 
 		// Events with missing properties
-		await plugin.event({ event: { type: "message.part.updated", properties: {} } });
+		await plugin.event({
+			event: { type: "message.part.updated", properties: {} },
+		});
 		await plugin.event({ event: { type: "message.updated", properties: {} } });
 		await plugin.event({ event: { type: "session.created", properties: {} } });
 		await plugin.event({ event: { type: "unknown.event", properties: {} } });
@@ -251,7 +319,11 @@ describe("ScrollPlugin", () => {
 
 	it("schedules suggest on tui.prompt.append", async () => {
 		const { client } = makeClient();
-		const plugin = await ScrollPlugin({ client, $: make$(), directory: "/tmp" });
+		const plugin = await SagePlugin({
+			client,
+			$: make$(),
+			directory: "/tmp",
+		});
 
 		await plugin.event({
 			event: {
@@ -265,12 +337,12 @@ describe("ScrollPlugin", () => {
 
 	it("RLM feedback calls 'suggest feedback' (not 'prompts append-feedback')", async () => {
 		// Disable dry-run so execScroll actually invokes $
-		delete process.env.SCROLL_PLUGIN_DRY_RUN;
-		process.env.SCROLL_RLM_FEEDBACK = "1";
+		process.env.SAGE_PLUGIN_DRY_RUN = "";
+		process.env.SAGE_RLM_FEEDBACK = "1";
 
 		const { client } = makeClient();
 		const $mock = make$();
-		const plugin = await ScrollPlugin({ client, $: $mock, directory: "/tmp" });
+		const plugin = await SagePlugin({ client, $: $mock, directory: "/tmp" });
 
 		// 1. Capture a prompt
 		await plugin["chat.message"](
@@ -288,18 +360,22 @@ describe("ScrollPlugin", () => {
 		await plugin.event({
 			event: {
 				type: "message.part.updated",
-				properties: { part: { type: "text", text: "Rust is a systems language." } },
+				properties: {
+					part: { type: "text", text: "Rust is a systems language." },
+				},
 			},
 		});
 		await plugin.event({
 			event: {
 				type: "message.updated",
-				properties: { info: { role: "assistant", tokens: { input: 10, output: 20 } } },
+				properties: {
+					info: { role: "assistant", tokens: { input: 10, output: 20 } },
+				},
 			},
 		});
 
 		// Check that any calls to $ containing "feedback" use "suggest feedback", not "prompts append-feedback"
-		const feedbackCalls = $mock.calls.filter(c => c.cmd.includes("feedback"));
+		const feedbackCalls = $mock.calls.filter((c) => c.cmd.includes("feedback"));
 		for (const call of feedbackCalls) {
 			expect(call.cmd).toContain("suggest");
 			expect(call.cmd).not.toContain("append-feedback");
@@ -307,12 +383,16 @@ describe("ScrollPlugin", () => {
 		}
 
 		// Restore dry-run for other tests
-		process.env.SCROLL_PLUGIN_DRY_RUN = "1";
+		process.env.SAGE_PLUGIN_DRY_RUN = "1";
 	});
 
 	it("non-text parts in message.part.updated are ignored", async () => {
 		const { client } = makeClient();
-		const plugin = await ScrollPlugin({ client, $: make$(), directory: "/tmp" });
+		const plugin = await SagePlugin({
+			client,
+			$: make$(),
+			directory: "/tmp",
+		});
 
 		await plugin["chat.message"](
 			{ sessionID: "s1" },
@@ -338,7 +418,9 @@ describe("ScrollPlugin", () => {
 		await plugin.event({
 			event: {
 				type: "message.updated",
-				properties: { info: { role: "assistant", tokens: { input: 1, output: 1 } } },
+				properties: {
+					info: { role: "assistant", tokens: { input: 1, output: 1 } },
+				},
 			},
 		});
 	});

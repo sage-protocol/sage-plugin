@@ -1,18 +1,18 @@
 {
-  "name": "@sage-protocol/scroll-plugin",
-  "version": "0.1.4",
-  "description": "OpenCode plugin for Scroll: capture + suggest in one module",
-  "main": "index.js",
-  "type": "module",
-  "license": "MIT",
-  "publishConfig": {
-    "access": "public"
-  },
-  "scripts": {
-    "lint": "bunx biome check .",
-    "test": "bun test --no-bail"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^1.7.3"
-  }
+	"name": "@sage-protocol/sage-plugin",
+	"version": "0.1.4",
+	"description": "OpenCode plugin for Sage: capture + suggest in one module",
+	"main": "index.js",
+	"type": "module",
+	"license": "MIT",
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"lint": "bunx biome check .",
+		"test": "bun test --no-bail"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.7.3"
+	}
 }

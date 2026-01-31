@@ -1,20 +1,20 @@
-// Scroll OpenCode plugin: capture + suggest + RLM feedback combined
+// Sage OpenCode plugin: capture + suggest + RLM feedback combined
 //
 // Uses the documented OpenCode plugin event handler pattern.
-// Spawns scroll commands via the `$` shell helper for portability.
+// Spawns sage commands via the `$` shell helper for portability.
 // Now includes RLM feedback appending when steering is detected.
 
-export const ScrollPlugin = async ({ client, $, directory }) => {
+export const SagePlugin = async ({ client, $, directory }) => {
 	const CONFIG = {
-		scrollBin: process.env.SCROLL_BIN || "scroll",
-		suggestLimit: Number.parseInt(process.env.SCROLL_SUGGEST_LIMIT || "3", 10),
+		sageBin: process.env.SAGE_BIN || "sage",
+		suggestLimit: Number.parseInt(process.env.SAGE_SUGGEST_LIMIT || "3", 10),
 		debounceMs: Number.parseInt(
-			process.env.SCROLL_SUGGEST_DEBOUNCE_MS || "800",
+			process.env.SAGE_SUGGEST_DEBOUNCE_MS || "800",
 			10,
 		),
-		provision: (process.env.SCROLL_SUGGEST_PROVISION || "1") === "1",
-		dryRun: (process.env.SCROLL_PLUGIN_DRY_RUN || "0") === "1",
-		enableRlmFeedback: (process.env.SCROLL_RLM_FEEDBACK || "1") === "1",
+		provision: (process.env.SAGE_SUGGEST_PROVISION || "1") === "1",
+		dryRun: (process.env.SAGE_PLUGIN_DRY_RUN || "0") === "1",
+		enableRlmFeedback: (process.env.SAGE_RLM_FEEDBACK || "1") === "1",
 	};
 
 	let promptCaptured = false;
@@ -38,35 +38,37 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 		try {
 			if (client?.app?.log) {
 				await client.app.log({
-					service: "scroll-plugin",
+					service: "sage-plugin",
 					level,
 					message,
 					extra,
 				});
 			} else {
-				console.log(`[scroll-plugin:${level}]`, message, extra);
+				console.log(`[sage-plugin:${level}]`, message, extra);
 			}
 		} catch {
 			/* logging should never break the plugin */
 		}
 	};
 
-	const execScroll = async (args, env = {}) => {
+	const execSage = async (args, env = {}) => {
 		if (CONFIG.dryRun) return "";
 
-		const scrollEnv = { ...env, SCROLL_SOURCE: "opencode" };
+		const sageEnv = { ...env, SAGE_SOURCE: "opencode" };
 
 		try {
 			if ($) {
 				// Use OpenCode's $ shell helper for portability
-				const cmd = [CONFIG.scrollBin, ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
-				const result = await $({ env: scrollEnv })`${cmd}`;
+				const cmd = [CONFIG.sageBin, ...args]
+					.map((a) => `'${a.replace(/'/g, "'\\''")}'`)
+					.join(" ");
+				const result = await $({ env: sageEnv })`${cmd}`;
 				return (result?.stdout ?? result ?? "").toString().trim();
 			}
 			// Fallback to Bun.spawn if $ not available
 			if (typeof Bun !== "undefined") {
-				const proc = Bun.spawn([CONFIG.scrollBin, ...args], {
-					env: { ...process.env, ...scrollEnv },
+				const proc = Bun.spawn([CONFIG.sageBin, ...args], {
+					env: { ...process.env, ...sageEnv },
 					stdout: "pipe",
 					stderr: "pipe",
 				});
@@ -75,10 +77,10 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 			}
 			return "";
 		} catch (e) {
-			throw new Error(`scroll command failed: ${e.message || e}`);
+			throw new Error(`sage command failed: ${e.message || e}`);
 		}
 	};
-	
+
 	// Parse suggestion output to extract prompt key
 	const parseSuggestionKey = (suggestionText) => {
 		// Look for patterns like "ultrawork-parallel-orchestration" or similar keys
@@ -87,99 +89,109 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 		if (keyMatch) {
 			return keyMatch[1].trim();
 		}
-		
+
 		// Try to match standalone keys in the text
-		const lines = suggestionText.split('\n');
+		const lines = suggestionText.split("\n");
 		for (const line of lines) {
 			// Look for common prompt key patterns
 			const match = line.match(/^\s*[-•*]?\s*([a-z0-9-]+)(?:\s*[-:]\s*|\s*$)/);
-			if (match && match[1].includes('-')) {
+			if (match?.[1]?.includes("-")) {
 				return match[1];
 			}
 		}
-		
+
 		return null;
 	};
-	
+
 	// Append RLM feedback to a prompt
 	const appendRlmFeedback = async (promptKey, feedbackEntry) => {
 		if (!CONFIG.enableRlmFeedback || !promptKey) {
 			return false;
 		}
-		
+
 		try {
-			await log("debug", "appending RLM feedback", { promptKey, feedback: feedbackEntry });
-			
-			const result = await execScroll([
-				"suggest", "feedback",
+			await log("debug", "appending RLM feedback", {
+				promptKey,
+				feedback: feedbackEntry,
+			});
+
+			const result = await execSage([
+				"suggest",
+				"feedback",
 				promptKey,
 				feedbackEntry,
-				"--source", "opencode-plugin"
+				"--source",
+				"opencode-plugin",
 			]);
-			
+
 			if (result) {
 				await log("info", "RLM feedback appended", { promptKey });
 				return true;
 			}
 		} catch (e) {
-			await log("warn", "failed to append RLM feedback", { 
-				promptKey, 
-				error: String(e) 
+			await log("warn", "failed to append RLM feedback", {
+				promptKey,
+				error: String(e),
 			});
 		}
-		
+
 		return false;
 	};
-	
+
 	// Analyze prompt correlation with suggestion
 	const analyzePromptCorrelation = async (userPrompt) => {
 		if (!lastSuggestion || !lastSuggestionTimestamp) {
 			return null;
 		}
-		
+
 		const now = Date.now();
 		const timeDiff = now - lastSuggestionTimestamp;
-		
+
 		// Outside correlation window
 		if (timeDiff > SUGGESTION_CORRELATION_WINDOW_MS) {
 			return null;
 		}
-		
+
 		const suggestionKey = lastSuggestionPromptKey;
 		if (!suggestionKey) {
 			return null;
 		}
-		
+
 		// Check if user prompt matches or differs from suggestion
 		const userPromptLower = userPrompt.toLowerCase().trim();
 		const suggestionLower = lastSuggestion.toLowerCase().trim();
-		
+
 		// Extract keywords from both
 		const userKeywords = userPromptLower.split(/\s+/);
 		const suggestionKeywords = suggestionLower.split(/\s+/);
-		
+
 		// Check for significant overlap
-		const overlap = userKeywords.filter(k => suggestionKeywords.includes(k));
-		const overlapRatio = overlap.length / Math.max(userKeywords.length, suggestionKeywords.length);
-		
+		const overlap = userKeywords.filter((k) => suggestionKeywords.includes(k));
+		const overlapRatio =
+			overlap.length / Math.max(userKeywords.length, suggestionKeywords.length);
+
 		// Determine correlation type
 		if (overlapRatio > 0.7) {
 			return { type: "accepted", key: suggestionKey, overlap: overlapRatio };
-		} else if (overlapRatio > 0.3) {
+		}
+		if (overlapRatio > 0.3) {
 			// Steering - user modified the suggestion
-			const addedKeywords = userKeywords.filter(k => !suggestionKeywords.includes(k));
-			const removedKeywords = suggestionKeywords.filter(k => !userKeywords.includes(k));
-			
-			return { 
-				type: "steered", 
-				key: suggestionKey, 
+			const addedKeywords = userKeywords.filter(
+				(k) => !suggestionKeywords.includes(k),
+			);
+			const removedKeywords = suggestionKeywords.filter(
+				(k) => !userKeywords.includes(k),
+			);
+
+			return {
+				type: "steered",
+				key: suggestionKey,
 				overlap: overlapRatio,
 				added: addedKeywords,
-				removed: removedKeywords
+				removed: removedKeywords,
 			};
-		} else {
-			return { type: "rejected", key: suggestionKey, overlap: overlapRatio };
 		}
+		return { type: "rejected", key: suggestionKey, overlap: overlapRatio };
 	};
 
 	const scheduleSuggest = (text) => {
@@ -196,7 +208,7 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 				if (current !== runId) return;
 				if (prompt === lastInjected) return;
 
-				await log("debug", "running scroll suggest", {
+				await log("debug", "running sage suggest", {
 					cwd: directory,
 					prompt_len: prompt.length,
 				});
@@ -211,7 +223,7 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 					];
 					if (CONFIG.provision) args.push("--provision");
 
-					const suggestions = await execScroll(args);
+					const suggestions = await execSage(args);
 					if (!suggestions) return;
 					if (current !== runId) return;
 
@@ -219,10 +231,10 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 					lastSuggestion = prompt;
 					lastSuggestionTimestamp = Date.now();
 					lastSuggestionPromptKey = parseSuggestionKey(suggestions);
-					
+
 					await log("debug", "suggestion stored for correlation", {
 						key: lastSuggestionPromptKey,
-						timestamp: lastSuggestionTimestamp
+						timestamp: lastSuggestionTimestamp,
 					});
 
 					lastInjected = prompt;
@@ -230,7 +242,7 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 						body: { text: `\n\n${suggestions}\n` },
 					});
 				} catch (e) {
-					await log("warn", "scroll suggest failed", { error: String(e) });
+					await log("warn", "sage suggest failed", { error: String(e) });
 				}
 			})();
 		}, CONFIG.debounceMs);
@@ -244,8 +256,8 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 			currentSessionId = input?.sessionID ?? currentSessionId;
 			currentModel = input?.model?.modelID ?? currentModel;
 
-			const textParts = (output?.parts ?? []).filter(p => p.type === "text");
-			const content = textParts.map(p => p.text ?? "").join("\n");
+			const textParts = (output?.parts ?? []).filter((p) => p.type === "text");
+			const content = textParts.map((p) => p.text ?? "").join("\n");
 			if (!content.trim()) return;
 
 			promptCaptured = true;
@@ -257,7 +269,7 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 				await log("debug", "prompt correlation detected", correlation);
 
 				let feedbackEntry = "";
-				const date = new Date().toISOString().split('T')[0];
+				const date = new Date().toISOString().split("T")[0];
 
 				switch (correlation.type) {
 					case "accepted":
@@ -265,7 +277,8 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 						break;
 					case "steered": {
 						const added = correlation.added?.slice(0, 3).join(", ") || "none";
-						const removed = correlation.removed?.slice(0, 3).join(", ") || "none";
+						const removed =
+							correlation.removed?.slice(0, 3).join(", ") || "none";
 						feedbackEntry = `[${date}] User steered from suggestion - Added keywords: "${added}" - Removed: "${removed}"`;
 						break;
 					}
@@ -284,11 +297,10 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 			}
 
 			try {
-				await execScroll(["capture", "hook", "prompt"], {
-					PROMPT: content,
-					SCROLL_SESSION_ID: currentSessionId ?? "",
-					SCROLL_MODEL: currentModel ?? "",
-					SCROLL_WORKSPACE: directory ?? "",
+				await execSage(["capture", "hook", "prompt"], {
+					SAGE_SESSION_ID: currentSessionId ?? "",
+					SAGE_MODEL: currentModel ?? "",
+					SAGE_WORKSPACE: directory ?? "",
 				});
 			} catch (e) {
 				await log("warn", "capture prompt failed", { error: String(e) });
@@ -317,15 +329,16 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 						const responseText = assistantParts.join("");
 						if (responseText.trim()) {
 							try {
-								await execScroll(["capture", "hook", "response"], {
-									CLAUDE_RESPONSE: responseText,
-									SCROLL_SESSION_ID: info.sessionID ?? currentSessionId ?? "",
-									SCROLL_MODEL: info.modelID ?? currentModel ?? "",
+								await execSage(["capture", "hook", "response"], {
+									SAGE_SESSION_ID: info.sessionID ?? currentSessionId ?? "",
+									SAGE_MODEL: info.modelID ?? currentModel ?? "",
 									TOKENS_INPUT: String(info.tokens?.input ?? ""),
 									TOKENS_OUTPUT: String(info.tokens?.output ?? ""),
 								});
 							} catch (e) {
-								await log("warn", "capture response failed", { error: String(e) });
+								await log("warn", "capture response failed", {
+									error: String(e),
+								});
 							}
 						}
 						promptCaptured = false;
@@ -360,4 +373,4 @@ export const ScrollPlugin = async ({ client, $, directory }) => {
 	};
 };
 
-export default ScrollPlugin;
+export default SagePlugin;

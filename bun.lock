@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "scroll-plugin",
+      "name": "sage-plugin",
       "devDependencies": {
         "@biomejs/biome": "^1.7.3",
       },

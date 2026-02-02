@@ -336,7 +336,7 @@ describe("SagePlugin", () => {
 	});
 
 	it("RLM feedback calls 'suggest feedback' (not 'prompts append-feedback')", async () => {
-		// Disable dry-run so execScroll actually invokes $
+		// Disable dry-run so exec sage actually invokes $
 		process.env.SAGE_PLUGIN_DRY_RUN = "";
 		process.env.SAGE_RLM_FEEDBACK = "1";
 

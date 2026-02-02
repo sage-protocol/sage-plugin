@@ -1,6 +1,6 @@
 {
 	"name": "@sage-protocol/sage-plugin",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"description": "OpenCode plugin for Sage: capture + suggest in one module",
 	"main": "index.js",
 	"type": "module",

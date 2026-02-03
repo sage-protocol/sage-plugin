@@ -2,426 +2,468 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import SagePlugin from "./index.js";
 
 describe("SagePlugin", () => {
-	beforeEach(() => {
-		process.env.SAGE_PLUGIN_DRY_RUN = "1";
-	});
+  beforeEach(() => {
+    process.env.SAGE_PLUGIN_DRY_RUN = "1";
+  });
 
-	const makeClient = () => {
-		const appLogCalls = [];
-		const promptAppends = [];
-		return {
-			client: {
-				app: {
-					log: ({ level, message, extra }) =>
-						appLogCalls.push({ level, message, extra }),
-				},
-				tui: {
-					appendPrompt: ({ body }) => promptAppends.push(body?.text ?? ""),
-				},
-			},
-			appLogCalls,
-			promptAppends,
-		};
-	};
+  const makeClient = () => {
+    const appLogCalls = [];
+    const promptAppends = [];
+    return {
+      client: {
+        app: {
+          log: ({ level, message, extra }) => appLogCalls.push({ level, message, extra }),
+        },
+        tui: {
+          appendPrompt: ({ body }) => promptAppends.push(body?.text ?? ""),
+        },
+      },
+      appLogCalls,
+      promptAppends,
+    };
+  };
 
-	const make$ = () => {
-		const calls = [];
-		const shell = (opts) => {
-			return (strings, ...values) => {
-				const cmd = strings.reduce(
-					(acc, str, i) => acc + str + (values[i] ?? ""),
-					"",
-				);
-				calls.push({ cmd, env: opts?.env });
-				return { stdout: "" };
-			};
-		};
-		shell.calls = calls;
-		return shell;
-	};
+  const make$ = () => {
+    const calls = [];
+    const shell = (opts) => {
+      return (strings, ...values) => {
+        const cmd = strings.reduce((acc, str, i) => acc + str + (values[i] ?? ""), "");
+        calls.push({ cmd, env: opts?.env });
+        return { stdout: "" };
+      };
+    };
+    shell.calls = calls;
+    return shell;
+  };
 
-	it("returns event handler and chat.message hook", async () => {
-		const { client } = makeClient();
-		const plugin = await SagePlugin({
-			client,
-			$: make$(),
-			directory: "/tmp",
-		});
+  it("returns event handler and chat.message hook", async () => {
+    const { client } = makeClient();
+    const plugin = await SagePlugin({
+      client,
+      $: make$(),
+      directory: "/tmp",
+    });
 
-		expect(typeof plugin.event).toBe("function");
-		expect(typeof plugin["chat.message"]).toBe("function");
-	});
+    expect(typeof plugin.event).toBe("function");
+    expect(typeof plugin["chat.message"]).toBe("function");
+  });
 
-	it("chat.message hook captures prompt with session/model env vars", async () => {
-		const { client } = makeClient();
-		const $mock = make$();
-		const plugin = await SagePlugin({ client, $: $mock, directory: "/tmp" });
+  it("chat.message hook captures prompt with session/model env vars", async () => {
+    const { client } = makeClient();
+    const $mock = make$();
+    const plugin = await SagePlugin({ client, $: $mock, directory: "/tmp" });
 
-		await plugin["chat.message"](
-			{
-				sessionID: "sess-abc",
-				model: { providerID: "anthropic", modelID: "claude-3" },
-			},
-			{ message: {}, parts: [{ type: "text", text: "hello world" }] },
-		);
+    await plugin["chat.message"](
+      {
+        sessionID: "sess-abc",
+        model: { providerID: "anthropic", modelID: "claude-3" },
+      },
+      { message: {}, parts: [{ type: "text", text: "hello world" }] },
+    );
 
-		// In dry-run mode no command is executed, but state should be set
-		// No error means it worked
-	});
+    // In dry-run mode no command is executed, but state should be set
+    // No error means it worked
+  });
 
-	it("chat.message hook ignores empty parts", async () => {
-		const { client } = makeClient();
-		const plugin = await SagePlugin({
-			client,
-			$: make$(),
-			directory: "/tmp",
-		});
+  it("spawns capture hooks with prompt/response env vars", async () => {
+    process.env.SAGE_PLUGIN_DRY_RUN = "";
 
-		// Should not throw or set promptCaptured
-		await plugin["chat.message"](
-			{ sessionID: "s1" },
-			{ parts: [{ type: "text", text: "   " }] },
-		);
+    const { client } = makeClient();
+    const $mock = make$();
+    const plugin = await SagePlugin({ client, $: $mock, directory: "/tmp" });
 
-		// Subsequent assistant message.updated should be ignored (no prompt captured)
-		await plugin.event({
-			event: {
-				type: "message.updated",
-				properties: { info: { role: "assistant", modelID: "x", tokens: {} } },
-			},
-		});
-	});
+    await plugin["chat.message"](
+      { sessionID: "s1", model: { providerID: "openai", modelID: "gpt-4" } },
+      { parts: [{ type: "text", text: "hello world" }] },
+    );
 
-	it("message.part.updated accumulates assistant text parts", async () => {
-		const { client } = makeClient();
-		const plugin = await SagePlugin({
-			client,
-			$: make$(),
-			directory: "/tmp",
-		});
+    await plugin.event({
+      event: {
+        type: "message.part.updated",
+        properties: { part: { type: "text", text: "hi there" } },
+      },
+    });
 
-		// First capture a prompt via chat.message hook
-		await plugin["chat.message"](
-			{ sessionID: "s1", model: { modelID: "claude-3" } },
-			{ parts: [{ type: "text", text: "explain rust" }] },
-		);
+    await plugin.event({
+      event: {
+        type: "message.updated",
+        properties: {
+          info: {
+            role: "assistant",
+            sessionID: "s1",
+            modelID: "gpt-4",
+            tokens: { input: 10, output: 20 },
+          },
+        },
+      },
+    });
 
-		// Simulate streaming assistant parts
-		await plugin.event({
-			event: {
-				type: "message.part.updated",
-				properties: {
-					part: {
-						type: "text",
-						text: "Rust is ",
-						sessionID: "s1",
-						messageID: "m1",
-					},
-				},
-			},
-		});
-		await plugin.event({
-			event: {
-				type: "message.part.updated",
-				properties: {
-					part: {
-						type: "text",
-						text: "a systems language.",
-						sessionID: "s1",
-						messageID: "m1",
-					},
-				},
-			},
-		});
+    const promptCall = $mock.calls.find(
+      (c) => c.cmd.includes("capture") && c.cmd.includes("hook") && c.cmd.includes("prompt"),
+    );
+    expect(promptCall).toBeDefined();
+    expect(promptCall.env.SAGE_SOURCE).toBe("opencode");
+    expect(promptCall.env.PROMPT).toBe("hello world");
+    expect(promptCall.env.SAGE_SESSION_ID).toBe("s1");
+    expect(promptCall.env.SAGE_MODEL).toBe("gpt-4");
 
-		// Finalize with message.updated
-		await plugin.event({
-			event: {
-				type: "message.updated",
-				properties: {
-					info: {
-						role: "assistant",
-						sessionID: "s1",
-						modelID: "claude-3",
-						tokens: { input: 10, output: 20 },
-					},
-				},
-			},
-		});
+    const responseCall = $mock.calls.find(
+      (c) => c.cmd.includes("capture") && c.cmd.includes("hook") && c.cmd.includes("response"),
+    );
+    expect(responseCall).toBeDefined();
+    expect(responseCall.env.SAGE_SOURCE).toBe("opencode");
+    expect(responseCall.env.SAGE_RESPONSE).toBe("hi there");
+    expect(responseCall.env.TOKENS_INPUT).toBe("10");
+    expect(responseCall.env.TOKENS_OUTPUT).toBe("20");
+  });
 
-		// No error means parts were accumulated and flushed correctly
-	});
+  it("chat.message hook ignores empty parts", async () => {
+    const { client } = makeClient();
+    const plugin = await SagePlugin({
+      client,
+      $: make$(),
+      directory: "/tmp",
+    });
 
-	it("message.updated ignores non-assistant roles", async () => {
-		const { client } = makeClient();
-		const plugin = await SagePlugin({
-			client,
-			$: make$(),
-			directory: "/tmp",
-		});
+    // Should not throw or set promptCaptured
+    await plugin["chat.message"]({ sessionID: "s1" }, { parts: [{ type: "text", text: "   " }] });
 
-		await plugin["chat.message"](
-			{ sessionID: "s1" },
-			{ parts: [{ type: "text", text: "hi" }] },
-		);
+    // Subsequent assistant message.updated should be ignored (no prompt captured)
+    await plugin.event({
+      event: {
+        type: "message.updated",
+        properties: { info: { role: "assistant", modelID: "x", tokens: {} } },
+      },
+    });
+  });
 
-		// user role message.updated should not flush
-		await plugin.event({
-			event: {
-				type: "message.updated",
-				properties: { info: { role: "user", sessionID: "s1" } },
-			},
-		});
+  it("message.part.updated accumulates assistant text parts", async () => {
+    const { client } = makeClient();
+    const plugin = await SagePlugin({
+      client,
+      $: make$(),
+      directory: "/tmp",
+    });
 
-		// promptCaptured should still be true — assistant parts can still arrive
-		// Verify by sending an actual assistant completion
-		await plugin.event({
-			event: {
-				type: "message.part.updated",
-				properties: { part: { type: "text", text: "response" } },
-			},
-		});
-		await plugin.event({
-			event: {
-				type: "message.updated",
-				properties: {
-					info: { role: "assistant", tokens: { input: 1, output: 2 } },
-				},
-			},
-		});
-	});
+    // First capture a prompt via chat.message hook
+    await plugin["chat.message"](
+      { sessionID: "s1", model: { modelID: "claude-3" } },
+      { parts: [{ type: "text", text: "explain rust" }] },
+    );
 
-	it("session.created resets state and tracks session ID", async () => {
-		const { client, appLogCalls } = makeClient();
-		const plugin = await SagePlugin({
-			client,
-			$: make$(),
-			directory: "/tmp",
-		});
+    // Simulate streaming assistant parts
+    await plugin.event({
+      event: {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            type: "text",
+            text: "Rust is ",
+            sessionID: "s1",
+            messageID: "m1",
+          },
+        },
+      },
+    });
+    await plugin.event({
+      event: {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            type: "text",
+            text: "a systems language.",
+            sessionID: "s1",
+            messageID: "m1",
+          },
+        },
+      },
+    });
 
-		// Capture a prompt first
-		await plugin["chat.message"](
-			{ sessionID: "old-session" },
-			{ parts: [{ type: "text", text: "hello" }] },
-		);
+    // Finalize with message.updated
+    await plugin.event({
+      event: {
+        type: "message.updated",
+        properties: {
+          info: {
+            role: "assistant",
+            sessionID: "s1",
+            modelID: "claude-3",
+            tokens: { input: 10, output: 20 },
+          },
+        },
+      },
+    });
 
-		// New session resets everything
-		await plugin.event({
-			event: {
-				type: "session.created",
-				properties: {
-					info: {
-						id: "new-session-123",
-						parentID: null,
-						directory: "/project",
-					},
-				},
-			},
-		});
+    // No error means parts were accumulated and flushed correctly
+  });
 
-		const sessionLog = appLogCalls.find((c) => c.message === "session created");
-		expect(sessionLog).toBeDefined();
-		expect(sessionLog.extra.sessionId).toBe("new-session-123");
-		expect(sessionLog.extra.isSubagent).toBe(false);
-	});
+  it("message.updated ignores non-assistant roles", async () => {
+    const { client } = makeClient();
+    const plugin = await SagePlugin({
+      client,
+      $: make$(),
+      directory: "/tmp",
+    });
 
-	it("session.created detects subagent via parentID", async () => {
-		const { client, appLogCalls } = makeClient();
-		const plugin = await SagePlugin({
-			client,
-			$: make$(),
-			directory: "/tmp",
-		});
+    await plugin["chat.message"]({ sessionID: "s1" }, { parts: [{ type: "text", text: "hi" }] });
 
-		await plugin.event({
-			event: {
-				type: "session.created",
-				properties: { info: { id: "child-1", parentID: "parent-1" } },
-			},
-		});
+    // user role message.updated should not flush
+    await plugin.event({
+      event: {
+        type: "message.updated",
+        properties: { info: { role: "user", sessionID: "s1" } },
+      },
+    });
 
-		const sessionLog = appLogCalls.find((c) => c.message === "session created");
-		expect(sessionLog.extra.isSubagent).toBe(true);
-	});
+    // promptCaptured should still be true — assistant parts can still arrive
+    // Verify by sending an actual assistant completion
+    await plugin.event({
+      event: {
+        type: "message.part.updated",
+        properties: { part: { type: "text", text: "response" } },
+      },
+    });
+    await plugin.event({
+      event: {
+        type: "message.updated",
+        properties: {
+          info: { role: "assistant", tokens: { input: 1, output: 2 } },
+        },
+      },
+    });
+  });
 
-	it("multiple prompt-response cycles work correctly", async () => {
-		const { client } = makeClient();
-		const plugin = await SagePlugin({
-			client,
-			$: make$(),
-			directory: "/tmp",
-		});
+  it("session.created resets state and tracks session ID", async () => {
+    const { client, appLogCalls } = makeClient();
+    const plugin = await SagePlugin({
+      client,
+      $: make$(),
+      directory: "/tmp",
+    });
 
-		// Cycle 1
-		await plugin["chat.message"](
-			{ sessionID: "s1", model: { modelID: "claude-3" } },
-			{ parts: [{ type: "text", text: "first question" }] },
-		);
-		await plugin.event({
-			event: {
-				type: "message.part.updated",
-				properties: { part: { type: "text", text: "first answer" } },
-			},
-		});
-		await plugin.event({
-			event: {
-				type: "message.updated",
-				properties: {
-					info: { role: "assistant", tokens: { input: 5, output: 10 } },
-				},
-			},
-		});
+    // Capture a prompt first
+    await plugin["chat.message"](
+      { sessionID: "old-session" },
+      { parts: [{ type: "text", text: "hello" }] },
+    );
 
-		// Cycle 2
-		await plugin["chat.message"](
-			{ sessionID: "s1", model: { modelID: "claude-3" } },
-			{ parts: [{ type: "text", text: "second question" }] },
-		);
-		await plugin.event({
-			event: {
-				type: "message.part.updated",
-				properties: { part: { type: "text", text: "second answer" } },
-			},
-		});
-		await plugin.event({
-			event: {
-				type: "message.updated",
-				properties: {
-					info: { role: "assistant", tokens: { input: 8, output: 15 } },
-				},
-			},
-		});
+    // New session resets everything
+    await plugin.event({
+      event: {
+        type: "session.created",
+        properties: {
+          info: {
+            id: "new-session-123",
+            parentID: null,
+            directory: "/project",
+          },
+        },
+      },
+    });
 
-		// No errors means state properly resets between cycles
-	});
+    const sessionLog = appLogCalls.find((c) => c.message === "session created");
+    expect(sessionLog).toBeDefined();
+    expect(sessionLog.extra.sessionId).toBe("new-session-123");
+    expect(sessionLog.extra.isSubagent).toBe(false);
+  });
 
-	it("handles missing/null properties gracefully", async () => {
-		const { client } = makeClient();
-		const plugin = await SagePlugin({
-			client,
-			$: make$(),
-			directory: "/tmp",
-		});
+  it("session.created detects subagent via parentID", async () => {
+    const { client, appLogCalls } = makeClient();
+    const plugin = await SagePlugin({
+      client,
+      $: make$(),
+      directory: "/tmp",
+    });
 
-		// chat.message with null parts
-		await plugin["chat.message"](null, null);
-		await plugin["chat.message"]({}, { parts: null });
-		await plugin["chat.message"]({}, { parts: [] });
+    await plugin.event({
+      event: {
+        type: "session.created",
+        properties: { info: { id: "child-1", parentID: "parent-1" } },
+      },
+    });
 
-		// Events with missing properties
-		await plugin.event({
-			event: { type: "message.part.updated", properties: {} },
-		});
-		await plugin.event({ event: { type: "message.updated", properties: {} } });
-		await plugin.event({ event: { type: "session.created", properties: {} } });
-		await plugin.event({ event: { type: "unknown.event", properties: {} } });
-	});
+    const sessionLog = appLogCalls.find((c) => c.message === "session created");
+    expect(sessionLog.extra.isSubagent).toBe(true);
+  });
 
-	it("schedules suggest on tui.prompt.append", async () => {
-		const { client } = makeClient();
-		const plugin = await SagePlugin({
-			client,
-			$: make$(),
-			directory: "/tmp",
-		});
+  it("multiple prompt-response cycles work correctly", async () => {
+    const { client } = makeClient();
+    const plugin = await SagePlugin({
+      client,
+      $: make$(),
+      directory: "/tmp",
+    });
 
-		await plugin.event({
-			event: {
-				type: "tui.prompt.append",
-				properties: { text: "build an MCP server" },
-			},
-		});
+    // Cycle 1
+    await plugin["chat.message"](
+      { sessionID: "s1", model: { modelID: "claude-3" } },
+      { parts: [{ type: "text", text: "first question" }] },
+    );
+    await plugin.event({
+      event: {
+        type: "message.part.updated",
+        properties: { part: { type: "text", text: "first answer" } },
+      },
+    });
+    await plugin.event({
+      event: {
+        type: "message.updated",
+        properties: {
+          info: { role: "assistant", tokens: { input: 5, output: 10 } },
+        },
+      },
+    });
 
-		// Suggest is debounced, so no immediate effect to assert
-	});
+    // Cycle 2
+    await plugin["chat.message"](
+      { sessionID: "s1", model: { modelID: "claude-3" } },
+      { parts: [{ type: "text", text: "second question" }] },
+    );
+    await plugin.event({
+      event: {
+        type: "message.part.updated",
+        properties: { part: { type: "text", text: "second answer" } },
+      },
+    });
+    await plugin.event({
+      event: {
+        type: "message.updated",
+        properties: {
+          info: { role: "assistant", tokens: { input: 8, output: 15 } },
+        },
+      },
+    });
 
-	it("RLM feedback calls 'suggest feedback' (not 'prompts append-feedback')", async () => {
-		// Disable dry-run so exec sage actually invokes $
-		process.env.SAGE_PLUGIN_DRY_RUN = "";
-		process.env.SAGE_RLM_FEEDBACK = "1";
+    // No errors means state properly resets between cycles
+  });
 
-		const { client } = makeClient();
-		const $mock = make$();
-		const plugin = await SagePlugin({ client, $: $mock, directory: "/tmp" });
+  it("handles missing/null properties gracefully", async () => {
+    const { client } = makeClient();
+    const plugin = await SagePlugin({
+      client,
+      $: make$(),
+      directory: "/tmp",
+    });
 
-		// 1. Capture a prompt
-		await plugin["chat.message"](
-			{ sessionID: "s1", model: { modelID: "claude-3" } },
-			{ parts: [{ type: "text", text: "explain rust" }] },
-		);
+    // chat.message with null parts
+    await plugin["chat.message"](null, null);
+    await plugin["chat.message"]({}, { parts: null });
+    await plugin["chat.message"]({}, { parts: [] });
 
-		// 2. Simulate a suggestion being injected (tui.prompt.append triggers suggest)
-		//    We need to trigger the internal suggest flow which sets lastSuggestionPromptKey.
-		//    The simplest path: simulate the full prompt→suggest→response→feedback cycle.
-		//    Since suggest is debounced and async, instead we directly drive message.updated
-		//    which triggers the RLM feedback path when a suggestion was correlated.
+    // Events with missing properties
+    await plugin.event({
+      event: { type: "message.part.updated", properties: {} },
+    });
+    await plugin.event({ event: { type: "message.updated", properties: {} } });
+    await plugin.event({ event: { type: "session.created", properties: {} } });
+    await plugin.event({ event: { type: "unknown.event", properties: {} } });
+  });
 
-		// 3. Simulate assistant response with tool-use of suggest command
-		await plugin.event({
-			event: {
-				type: "message.part.updated",
-				properties: {
-					part: { type: "text", text: "Rust is a systems language." },
-				},
-			},
-		});
-		await plugin.event({
-			event: {
-				type: "message.updated",
-				properties: {
-					info: { role: "assistant", tokens: { input: 10, output: 20 } },
-				},
-			},
-		});
+  it("schedules suggest on tui.prompt.append", async () => {
+    const { client } = makeClient();
+    const plugin = await SagePlugin({
+      client,
+      $: make$(),
+      directory: "/tmp",
+    });
 
-		// Check that any calls to $ containing "feedback" use "suggest feedback", not "prompts append-feedback"
-		const feedbackCalls = $mock.calls.filter((c) => c.cmd.includes("feedback"));
-		for (const call of feedbackCalls) {
-			expect(call.cmd).toContain("suggest");
-			expect(call.cmd).not.toContain("append-feedback");
-			expect(call.cmd).not.toContain("prompts");
-		}
+    await plugin.event({
+      event: {
+        type: "tui.prompt.append",
+        properties: { text: "build an MCP server" },
+      },
+    });
 
-		// Restore dry-run for other tests
-		process.env.SAGE_PLUGIN_DRY_RUN = "1";
-	});
+    // Suggest is debounced, so no immediate effect to assert
+  });
 
-	it("non-text parts in message.part.updated are ignored", async () => {
-		const { client } = makeClient();
-		const plugin = await SagePlugin({
-			client,
-			$: make$(),
-			directory: "/tmp",
-		});
+  it("RLM feedback calls 'suggest feedback' (not 'prompts append-feedback')", async () => {
+    // Disable dry-run so exec sage actually invokes $
+    process.env.SAGE_PLUGIN_DRY_RUN = "";
+    process.env.SAGE_RLM_FEEDBACK = "1";
 
-		await plugin["chat.message"](
-			{ sessionID: "s1" },
-			{ parts: [{ type: "text", text: "question" }] },
-		);
+    const { client } = makeClient();
+    const $mock = make$();
+    const plugin = await SagePlugin({ client, $: $mock, directory: "/tmp" });
 
-		// Tool-use part should be ignored
-		await plugin.event({
-			event: {
-				type: "message.part.updated",
-				properties: { part: { type: "tool-use", name: "bash", input: {} } },
-			},
-		});
+    // 1. Capture a prompt
+    await plugin["chat.message"](
+      { sessionID: "s1", model: { modelID: "claude-3" } },
+      { parts: [{ type: "text", text: "explain rust" }] },
+    );
 
-		// Only text parts should be accumulated — tool-use ignored
-		await plugin.event({
-			event: {
-				type: "message.part.updated",
-				properties: { part: { type: "text", text: "actual response" } },
-			},
-		});
+    // 2. Simulate a suggestion being injected (tui.prompt.append triggers suggest)
+    //    We need to trigger the internal suggest flow which sets lastSuggestionPromptKey.
+    //    The simplest path: simulate the full prompt→suggest→response→feedback cycle.
+    //    Since suggest is debounced and async, instead we directly drive message.updated
+    //    which triggers the RLM feedback path when a suggestion was correlated.
 
-		await plugin.event({
-			event: {
-				type: "message.updated",
-				properties: {
-					info: { role: "assistant", tokens: { input: 1, output: 1 } },
-				},
-			},
-		});
-	});
+    // 3. Simulate assistant response with tool-use of suggest command
+    await plugin.event({
+      event: {
+        type: "message.part.updated",
+        properties: {
+          part: { type: "text", text: "Rust is a systems language." },
+        },
+      },
+    });
+    await plugin.event({
+      event: {
+        type: "message.updated",
+        properties: {
+          info: { role: "assistant", tokens: { input: 10, output: 20 } },
+        },
+      },
+    });
+
+    // Check that any calls to $ containing "feedback" use "suggest feedback", not "prompts append-feedback"
+    const feedbackCalls = $mock.calls.filter((c) => c.cmd.includes("feedback"));
+    for (const call of feedbackCalls) {
+      expect(call.cmd).toContain("suggest");
+      expect(call.cmd).not.toContain("append-feedback");
+      expect(call.cmd).not.toContain("prompts");
+    }
+
+    // Restore dry-run for other tests
+    process.env.SAGE_PLUGIN_DRY_RUN = "1";
+  });
+
+  it("non-text parts in message.part.updated are ignored", async () => {
+    const { client } = makeClient();
+    const plugin = await SagePlugin({
+      client,
+      $: make$(),
+      directory: "/tmp",
+    });
+
+    await plugin["chat.message"](
+      { sessionID: "s1" },
+      { parts: [{ type: "text", text: "question" }] },
+    );
+
+    // Tool-use part should be ignored
+    await plugin.event({
+      event: {
+        type: "message.part.updated",
+        properties: { part: { type: "tool-use", name: "bash", input: {} } },
+      },
+    });
+
+    // Only text parts should be accumulated — tool-use ignored
+    await plugin.event({
+      event: {
+        type: "message.part.updated",
+        properties: { part: { type: "text", text: "actual response" } },
+      },
+    });
+
+    await plugin.event({
+      event: {
+        type: "message.updated",
+        properties: {
+          info: { role: "assistant", tokens: { input: 1, output: 1 } },
+        },
+      },
+    });
+  });
 });

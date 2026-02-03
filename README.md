@@ -35,14 +35,18 @@ Or run `sage init --opencode` to configure automatically.
 
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SAGE_BIN` | `sage` | Path to the sage binary |
-| `SAGE_SUGGEST_LIMIT` | `3` | Max suggestions per request |
-| `SAGE_SUGGEST_DEBOUNCE_MS` | `800` | Debounce delay for TUI suggestions |
-| `SAGE_SUGGEST_PROVISION` | `1` | Set `0` to skip MCP provisioning |
-| `SAGE_RLM_FEEDBACK` | `1` | Set `0` to disable RLM feedback tracking |
-| `SAGE_PLUGIN_DRY_RUN` | `0` | Set `1` to disable spawning sage (for tests) |
+| Variable                   | Default | Description                                  |
+| -------------------------- | ------- | -------------------------------------------- |
+| `SAGE_BIN`                 | `sage`  | Path to the sage binary                      |
+| `SAGE_SUGGEST_LIMIT`       | `3`     | Max suggestions per request                  |
+| `SAGE_SUGGEST_DEBOUNCE_MS` | `800`   | Debounce delay for TUI suggestions           |
+| `SAGE_SUGGEST_PROVISION`   | `1`     | Set `0` to skip MCP provisioning             |
+| `SAGE_RLM_FEEDBACK`        | `1`     | Set `0` to disable RLM feedback tracking     |
+| `SAGE_PLUGIN_DRY_RUN`      | `0`     | Set `1` to disable spawning sage (for tests) |
+
+Notes:
+
+- The plugin passes user prompts via `PROMPT` and assistant responses via `SAGE_RESPONSE` when invoking `sage capture hook prompt|response`.
 
 ## Requirements
 

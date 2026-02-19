@@ -9,6 +9,7 @@ export const SagePlugin = async ({ client, $, directory }) => {
     sageBin: process.env.SAGE_BIN || "sage",
     suggestLimit: Number.parseInt(process.env.SAGE_SUGGEST_LIMIT || "3", 10),
     debounceMs: Number.parseInt(process.env.SAGE_SUGGEST_DEBOUNCE_MS || "800", 10),
+    timeoutMs: Number.parseInt(process.env.SAGE_TIMEOUT_MS || "20000", 10),
     provision: (process.env.SAGE_SUGGEST_PROVISION || "1") === "1",
     dryRun: (process.env.SAGE_PLUGIN_DRY_RUN || "0") === "1",
     enableRlmFeedback: (process.env.SAGE_RLM_FEEDBACK || "1") === "1",
@@ -118,12 +119,32 @@ export const SagePlugin = async ({ client, $, directory }) => {
     if (CONFIG.dryRun) return "";
 
     const sageEnv = { ...env, SAGE_SOURCE: "opencode" };
+    const withTimeout = async (promise, onTimeout) => {
+      let timer = null;
+      try {
+        return await Promise.race([
+          promise,
+          new Promise((_, reject) => {
+            timer = setTimeout(() => {
+              try {
+                onTimeout?.();
+              } catch {
+                // Best effort
+              }
+              reject(new Error(`sage command timed out after ${CONFIG.timeoutMs}ms`));
+            }, CONFIG.timeoutMs);
+          }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
 
     try {
       if ($) {
         // Use OpenCode's $ shell helper for portability
         const cmd = [CONFIG.sageBin, ...args].map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
-        const result = await $({ env: sageEnv })`${cmd}`;
+        const result = await withTimeout($({ env: sageEnv })`${cmd}`);
         return (result?.stdout ?? result ?? "").toString().trim();
       }
       // Fallback to Bun.spawn if $ not available
@@ -133,8 +154,24 @@ export const SagePlugin = async ({ client, $, directory }) => {
           stdout: "pipe",
           stderr: "pipe",
         });
-        const stdout = await new Response(proc.stdout).text();
-        return stdout.trim();
+        const run = (async () => {
+          const [exitCode, stdout, stderr] = await Promise.all([
+            proc.exited,
+            new Response(proc.stdout).text(),
+            new Response(proc.stderr).text(),
+          ]);
+          if (exitCode !== 0) {
+            throw new Error(`sage exited with code ${exitCode}${stderr ? `: ${stderr.trim()}` : ""}`);
+          }
+          return stdout.trim();
+        })();
+        return await withTimeout(run, () => {
+          try {
+            proc.kill("SIGKILL");
+          } catch {
+            // already exited
+          }
+        });
       }
       return "";
     } catch (e) {

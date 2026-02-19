@@ -9,7 +9,7 @@ import { mkdtempSync, existsSync } from "node:fs";
 
 /** Resolve the sage binary path. */
 export function resolveSageBin() {
-  return process.env.SAGE_BIN || new URL("../target/debug/sage", import.meta.url).pathname;
+  return process.env.SAGE_BIN || new URL("../sage/target/debug/sage", import.meta.url).pathname;
 }
 
 /**

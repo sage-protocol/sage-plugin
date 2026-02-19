@@ -83,7 +83,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 function makeSageProcess(env = {}) {
-  const sageBin = process.env.SAGE_BIN || new URL("../target/debug/sage", import.meta.url).pathname;
+  const sageBin = process.env.SAGE_BIN || new URL("../sage/target/debug/sage", import.meta.url).pathname;
   return Bun.spawn([sageBin, "mcp", "start"], {
     stdin: "pipe",
     stdout: "pipe",

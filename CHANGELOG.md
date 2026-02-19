@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.6](https://github.com/sage-protocol/sage-plugin/compare/sage-plugin-v0.1.5...sage-plugin-v0.1.6) (2026-02-19)
+
+
+### Bug Fixes
+
+* add subprocess timeout + fix binary path resolution ([cda22a8](https://github.com/sage-protocol/sage-plugin/commit/cda22a88544c6044cb3acc6ed80e7b5294182d44))
+* npmjs fixes ([73cec9b](https://github.com/sage-protocol/sage-plugin/commit/73cec9be79fec71b57abc04707ec1b4848d9311a))
+* pass prompt/response to capture hooks ([fae0341](https://github.com/sage-protocol/sage-plugin/commit/fae0341811d7f9081e1a33da40dd530d50d9f52e))
+
 ## [0.1.5](https://github.com/sage-protocol/sage-plugin/compare/sage-plugin-v0.1.4...sage-plugin-v0.1.5) (2026-02-02)
 
 

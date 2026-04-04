@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run Biome
+        run: bun run lint
+
+      - name: Run plugin tests
+        run: bun run test
+
+  latest-opencode-install-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build publish tarball
+        run: npm pack --json > pack.json
+
+      - name: Verify tarball contents
+        run: |
+          node -e 'const fs=require("node:fs"); const files=JSON.parse(fs.readFileSync("pack.json","utf8"))[0].files.map((entry) => entry.path).sort(); const expected=["CHANGELOG.md","README.md","index.js","package.json"]; if (JSON.stringify(files) !== JSON.stringify(expected)) throw new Error(`unexpected tarball contents: ${JSON.stringify(files)}`);'
+
+      - name: Install tarball into latest OpenCode
+        env:
+          HOME: ${{ github.workspace }}/.tmp-opencode-home
+        run: |
+          TAR_FILE=$(node -e 'const fs=require("node:fs"); process.stdout.write(JSON.parse(fs.readFileSync("pack.json","utf8"))[0].filename)')
+          npx --yes opencode-ai plugin "${{ github.workspace }}/${TAR_FILE}" --global 2>&1 | tee plugin-install.txt
+
+      - name: Verify OpenCode config references plugin tarball
+        run: |
+          node -e 'const fs=require("node:fs"); const configPath=process.env.GITHUB_WORKSPACE + "/.tmp-opencode-home/.config/opencode/opencode.jsonc"; const text=fs.readFileSync(configPath, "utf8"); if (!text.includes("sage-protocol-sage-plugin") || !text.includes(".tgz")) throw new Error(`unexpected OpenCode config:\n${text}`);'
+
+      - name: Verify OpenCode config resolves cleanly
+        env:
+          HOME: ${{ github.workspace }}/.tmp-opencode-home
+        run: |
+          npx --yes opencode-ai debug config > opencode-config.txt
+          cat opencode-config.txt

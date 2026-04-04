@@ -1,16 +1,24 @@
 {
   "name": "@sage-protocol/sage-plugin",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "OpenCode plugin for Sage: capture + suggest in one module",
   "main": "index.js",
   "type": "module",
   "license": "MIT",
+  "files": [
+    "index.js",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "lint": "bunx biome check .",
-    "test": "bun test --no-bail"
+    "lint": "bunx biome lint .",
+    "test": "bun test index.test.js",
+    "test:integration": "bun test mcp.integration.test.js",
+    "test:e2e": "bun test rlm.e2e.test.js rlm-feedback.e2e.test.js",
+    "test:all": "bun test --no-bail"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.7.3"

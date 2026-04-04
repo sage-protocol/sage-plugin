@@ -1,1 +1,6 @@
 node_modules/
+.tmp-opencode-home/
+pack.json
+plugin-install.txt
+opencode-config.txt
+*.tgz

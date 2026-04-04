@@ -2,6 +2,10 @@
 
 OpenCode plugin for Sage Protocol. Captures prompt/response pairs for RLM feedback and provides inline skill suggestions during coding sessions.
 
+Additional docs:
+- Setup: `docs/setup.md`
+- Developer guide: `docs/developer.md`
+
 ## What It Does
 
 - **Prompt Capture** - Silently records prompt/response pairs with session metadata (model, tokens, cost)
@@ -11,12 +15,20 @@ OpenCode plugin for Sage Protocol. Captures prompt/response pairs for RLM feedba
 
 ## Install
 
+Recommended integrated setup:
+
 ```bash
-mkdir -p ~/.config/opencode/plugin/@sage-protocol
-cp -r sage-plugin ~/.config/opencode/plugin/@sage-protocol/
+sage init --opencode
 ```
 
-Add the plugin to your `opencode.json`:
+Raw plugin package install with OpenCode:
+
+```bash
+opencode plugin @sage-protocol/sage-plugin --global
+```
+
+If you want a project-local plugin config instead of a global install, add the plugin to your
+`opencode.json`:
 
 ```json
 {
@@ -31,7 +43,8 @@ Add the plugin to your `opencode.json`:
 }
 ```
 
-Or run `sage init --opencode` to configure automatically.
+CI validates the packed tarball against the latest published `opencode-ai` CLI by running
+`opencode plugin <tarball> --global` inside an isolated HOME.
 
 ## Configuration
 
@@ -59,7 +72,9 @@ Notes:
 ```bash
 bun install
 bun run lint
-bun test
+bun run test
+bun run test:integration   # requires a built sage binary or SAGE_BIN
+bun run test:e2e           # requires daemon/MCP support from sage
 ```
 
 ## License

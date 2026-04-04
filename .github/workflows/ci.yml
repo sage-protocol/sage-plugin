@@ -31,6 +31,12 @@ jobs:
 
   latest-opencode-install-check:
     runs-on: ubuntu-latest
+    env:
+      HOME: ${{ github.workspace }}/.tmp-opencode-home
+      XDG_CONFIG_HOME: ${{ github.workspace }}/.tmp-opencode-home/.config
+      XDG_DATA_HOME: ${{ github.workspace }}/.tmp-opencode-home/.local/share
+      XDG_CACHE_HOME: ${{ github.workspace }}/.tmp-opencode-home/.cache
+      XDG_STATE_HOME: ${{ github.workspace }}/.tmp-opencode-home/.local/state
     steps:
       - uses: actions/checkout@v4
 
@@ -46,19 +52,16 @@ jobs:
           node -e 'const fs=require("node:fs"); const files=JSON.parse(fs.readFileSync("pack.json","utf8"))[0].files.map((entry) => entry.path).sort(); const expected=["CHANGELOG.md","README.md","index.js","package.json"]; if (JSON.stringify(files) !== JSON.stringify(expected)) throw new Error(`unexpected tarball contents: ${JSON.stringify(files)}`);'
 
       - name: Install tarball into latest OpenCode
-        env:
-          HOME: ${{ github.workspace }}/.tmp-opencode-home
         run: |
+          mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
           TAR_FILE=$(node -e 'const fs=require("node:fs"); process.stdout.write(JSON.parse(fs.readFileSync("pack.json","utf8"))[0].filename)')
           npx --yes opencode-ai plugin "${{ github.workspace }}/${TAR_FILE}" --global 2>&1 | tee plugin-install.txt
 
       - name: Verify OpenCode config references plugin tarball
         run: |
-          node -e 'const fs=require("node:fs"); const configPath=process.env.GITHUB_WORKSPACE + "/.tmp-opencode-home/.config/opencode/opencode.jsonc"; const text=fs.readFileSync(configPath, "utf8"); if (!text.includes("sage-protocol-sage-plugin") || !text.includes(".tgz")) throw new Error(`unexpected OpenCode config:\n${text}`);'
+          node -e 'const fs=require("node:fs"); const path=require("node:path"); const configPath=path.join(process.env.XDG_CONFIG_HOME, "opencode", "opencode.jsonc"); const text=fs.readFileSync(configPath, "utf8"); if (!text.includes("sage-protocol-sage-plugin") || !text.includes(".tgz")) throw new Error(`unexpected OpenCode config:\n${text}`);'
 
       - name: Verify OpenCode config resolves cleanly
-        env:
-          HOME: ${{ github.workspace }}/.tmp-opencode-home
         run: |
           npx --yes opencode-ai debug config > opencode-config.txt
           cat opencode-config.txt

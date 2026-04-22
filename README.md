@@ -21,6 +21,8 @@ Recommended integrated setup:
 sage init --opencode
 ```
 
+That integrated path combines two layers: this package's OpenCode plugin behavior and the bundled Sage base skill layer installed by `sage init`. For that base entry layer, the generic `sage` surface now inherits its shared product-story sections from `packages/sage/crates/cli/src/commands/skills/entry_shared.rs` plus `packages/sage/crates/cli/src/commands/skills/data/shared/`, so the generic/Codex/Pi/onboarding variants stay aligned.
+
 Raw plugin package install with OpenCode:
 
 ```bash

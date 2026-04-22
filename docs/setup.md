@@ -14,7 +14,7 @@
 sage init --opencode
 ```
 
-This configures the Sage MCP server, installs the plugin, and syncs the companion Sage skills.
+This configures the Sage MCP server, installs the plugin, and syncs the companion Sage skills. For the bundled base `sage` entry layer installed by `sage init`, shared conceptual sections now come from `packages/sage/crates/cli/src/commands/skills/entry_shared.rs` plus `packages/sage/crates/cli/src/commands/skills/data/shared/`, while OpenCode-specific plugin behavior stays in this package.
 
 ### Raw Plugin Install
 

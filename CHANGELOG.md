@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/sage-protocol/sage-plugin/compare/sage-plugin-v0.1.6...sage-plugin-v0.1.7) (2026-05-05)
+
+
+### Bug Fixes
+
+* ci improvements ([e9ace93](https://github.com/sage-protocol/sage-plugin/commit/e9ace93992e4c21fc99d2ea45055f2030988d976))
+
 ## [0.1.6](https://github.com/sage-protocol/sage-plugin/compare/sage-plugin-v0.1.5...sage-plugin-v0.1.6) (2026-02-19)
 
 

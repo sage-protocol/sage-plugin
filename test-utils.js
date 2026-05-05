@@ -220,6 +220,16 @@ export async function callTool(client, name, args = {}) {
   return { raw: result, text, json, isError: result?.isError ?? false };
 }
 
+/** Call the current Code Mode search tool with a domain/action envelope. */
+export async function callSageSearch(client, domain, action, params = {}) {
+  return callTool(client, "sage_search", { domain, action, params });
+}
+
+/** Call the current Code Mode execute tool with a domain/action envelope. */
+export async function callSageExecute(client, domain, action, params = {}) {
+  return callTool(client, "sage_execute", { domain, action, params });
+}
+
 /**
  * Inject a capture (prompt + response) via the sage CLI.
  * Uses `sage capture hook prompt` and `sage capture hook response` subcommands.

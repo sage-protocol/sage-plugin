@@ -1,7 +1,7 @@
 {
   "name": "@sage-protocol/sage-plugin",
   "version": "0.1.7",
-  "description": "OpenCode plugin for Sage: capture + suggest in one module",
+  "description": "OpenCode plugin for Sage prompts, skills, libraries, capture, suggestions, and value-network workflows",
   "main": "index.js",
   "type": "module",
   "license": "MIT",

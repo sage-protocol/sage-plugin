@@ -3,16 +3,16 @@
  *
  * Validates the full cycle:
  *   1. Start daemon + MCP server (isolated HOME)
- *   2. Baseline rlm_stats (zero state)
+ *   2. Baseline rlm/stats (zero state)
  *   3. Inject captures via CLI
- *   4. Run rlm_analyze_captures
- *   5. Query rlm_list_patterns
- *   6. Verify rlm_stats reflects the analysis
+ *   4. Run rlm/analyze_captures
+ *   5. Query rlm/list_patterns
+ *   6. Verify rlm/stats reflects the analysis
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import {
-  callTool,
+  callSageSearch,
   createIsolatedHome,
   injectCapture,
   killProc,
@@ -48,11 +48,11 @@ describe("RLM E2E: capture -> analyze -> patterns -> stats", () => {
   });
 
   it(
-    "baseline rlm_stats returns zero state",
+    "baseline rlm/stats returns zero state",
     async () => {
-      const result = await callTool(client, "rlm_stats");
+      const result = await callSageSearch(client, "rlm", "stats");
       if (result.isError) {
-        console.error("rlm_stats error:", result.text);
+        console.error("rlm/stats error:", result.text);
       }
       expect(result.isError).toBe(false);
       expect(result.json).toBeTruthy();
@@ -104,9 +104,9 @@ describe("RLM E2E: capture -> analyze -> patterns -> stats", () => {
   );
 
   it(
-    "rlm_analyze_captures returns analysis result",
+    "rlm/analyze_captures returns analysis result",
     async () => {
-      const { text, isError, json } = await callTool(client, "rlm_analyze_captures", {
+      const { text, isError, json } = await callSageSearch(client, "rlm", "analyze_captures", {
         goal: "optimize developer workflow",
       });
       expect(isError).toBe(false);
@@ -121,9 +121,9 @@ describe("RLM E2E: capture -> analyze -> patterns -> stats", () => {
   );
 
   it(
-    "rlm_list_patterns returns patterns array",
+    "rlm/list_patterns returns patterns array",
     async () => {
-      const { isError, json } = await callTool(client, "rlm_list_patterns", {});
+      const { isError, json } = await callSageSearch(client, "rlm", "list_patterns");
       expect(isError).toBe(false);
       if (json) {
         expect(Array.isArray(json.patterns)).toBe(true);
@@ -134,9 +134,9 @@ describe("RLM E2E: capture -> analyze -> patterns -> stats", () => {
   );
 
   it(
-    "rlm_stats after analysis reflects activity",
+    "rlm/stats after analysis reflects activity",
     async () => {
-      const { isError, json } = await callTool(client, "rlm_stats");
+      const { isError, json } = await callSageSearch(client, "rlm", "stats");
       expect(isError).toBe(false);
       expect(json).toBeTruthy();
       // After running analyze, total_analyses should have incremented

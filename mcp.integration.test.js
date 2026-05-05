@@ -2,6 +2,26 @@ import { describe, expect, it } from "bun:test";
 
 const TIMEOUT = 20_000;
 
+function parseToolJson(result) {
+  const text = result.content?.map((c) => c.text ?? "").join("\n") ?? "";
+  return JSON.parse(text);
+}
+
+async function callTool(client, name, args = {}) {
+  return client.request("tools/call", {
+    name,
+    arguments: args,
+  });
+}
+
+async function callSageSearch(client, domain, action, params = {}) {
+  return callTool(client, "sage_search", { domain, action, params });
+}
+
+async function callSageExecute(client, domain, action, params = {}) {
+  return callTool(client, "sage_execute", { domain, action, params });
+}
+
 function createMcpClient(proc) {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
@@ -117,13 +137,11 @@ describe("sage-plugin integration: CLI <-> MCP", () => {
         expect(Array.isArray(toolsList?.tools)).toBe(true);
         expect(toolsList.tools.length).toBeGreaterThan(0);
 
-        const hasProjectContext = toolsList.tools.some((t) => t.name === "get_project_context");
-        expect(hasProjectContext).toBe(true);
+        const toolNames = toolsList.tools.map((t) => t.name);
+        expect(toolNames).toContain("sage_search");
+        expect(toolNames).toContain("sage_execute");
 
-        const callRes = await client.request("tools/call", {
-          name: "get_project_context",
-          arguments: {},
-        });
+        const callRes = await callSageSearch(client, "meta", "get_project_context");
         expect(callRes).toBeTruthy();
         expect(callRes.isError || false).toBe(false);
       } finally {
@@ -134,7 +152,7 @@ describe("sage-plugin integration: CLI <-> MCP", () => {
   );
 
   it(
-    "get_prompt tool schema includes vars parameter",
+    "sage_execute tool schema accepts code mode parameters",
     async () => {
       const proc = makeSageProcess();
       const client = createMcpClient(proc);
@@ -143,11 +161,12 @@ describe("sage-plugin integration: CLI <-> MCP", () => {
         await initMcp(client);
 
         const toolsList = await client.request("tools/list", {});
-        const getPrompt = toolsList.tools.find((t) => t.name === "get_prompt");
-        expect(getPrompt).toBeTruthy();
-        expect(getPrompt.inputSchema.properties.vars).toBeTruthy();
-        expect(getPrompt.inputSchema.properties.vars.type).toBe("object");
-        expect(getPrompt.description).toContain("variables");
+        const sageExecute = toolsList.tools.find((t) => t.name === "sage_execute");
+        expect(sageExecute).toBeTruthy();
+        expect(sageExecute.inputSchema.properties.domain).toBeTruthy();
+        expect(sageExecute.inputSchema.properties.action).toBeTruthy();
+        expect(sageExecute.inputSchema.properties.params).toBeTruthy();
+        expect(sageExecute.description).toContain("Execute an action");
       } finally {
         proc.kill("SIGTERM");
       }
@@ -156,7 +175,7 @@ describe("sage-plugin integration: CLI <-> MCP", () => {
   );
 
   it(
-    "get_prompt interpolates vars in behavior prompt content",
+    "sage_execute prompts/get interpolates vars in behavior prompt content",
     async () => {
       // Create a temp data dir with a behavior-type library
       // sage resolves: $XDG_DATA_HOME/sage/libraries/
@@ -213,22 +232,17 @@ describe("sage-plugin integration: CLI <-> MCP", () => {
       try {
         await initMcp(client);
 
-        // Call get_prompt with vars
-        const callRes = await client.request("tools/call", {
-          name: "get_prompt",
-          arguments: {
-            key: "viral-thread",
-            library: "test-behaviors",
-            vars: { topic: "MCP", number: "10" },
-          },
+        const callRes = await callSageExecute(client, "prompts", "get", {
+          key: "viral-thread",
+          library: "test-behaviors",
+          vars: { topic: "MCP", number: "10" },
         });
 
         expect(callRes).toBeTruthy();
         expect(callRes.isError || false).toBe(false);
 
         // Parse the response content
-        const text = callRes.content?.map((c) => c.text ?? "").join("\n");
-        const result = JSON.parse(text);
+        const result = parseToolJson(callRes);
 
         expect(result.found).toBe(true);
         expect(result.prompt.content).toContain("10");

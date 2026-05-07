@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   lint-and-test:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
@@ -33,7 +33,7 @@ jobs:
         run: bun run test
 
   latest-opencode-install-check:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     env:
       HOME: ${{ github.workspace }}/.tmp-opencode-home
       XDG_CONFIG_HOME: ${{ github.workspace }}/.tmp-opencode-home/.config

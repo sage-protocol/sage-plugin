@@ -215,7 +215,7 @@ export const SagePlugin = async ({ client, $, directory }) => {
 
       const result = await execSage([
         "suggest",
-        "feedback",
+        "rlm-feedback",
         promptKey,
         feedbackEntry,
         "--source",

@@ -106,7 +106,7 @@ describe("RLM Feedback Correlation E2E", () => {
     expect(capturePromptCalls.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("feedback calls use 'suggest feedback' not 'prompts append-feedback'", async () => {
+  it("feedback calls use 'suggest rlm-feedback' not 'prompts append-feedback'", async () => {
     const { client } = makeClient();
     plugin = await SagePlugin({ client, $: $mock, directory: "/tmp" });
 
@@ -132,10 +132,11 @@ describe("RLM Feedback Correlation E2E", () => {
       },
     });
 
-    // Any feedback calls should use "suggest" path
+    // Any feedback calls should use "suggest rlm-feedback" path
     const feedbackCalls = $mock.calls.filter((c) => c.cmd.includes("feedback"));
     for (const call of feedbackCalls) {
       expect(call.cmd).toContain("suggest");
+      expect(call.cmd).toContain("rlm-feedback");
       expect(call.cmd).not.toContain("append-feedback");
       expect(call.cmd).not.toContain("prompts");
     }

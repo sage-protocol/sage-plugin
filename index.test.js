@@ -377,7 +377,7 @@ describe("SagePlugin", () => {
     // Suggest is debounced, so no immediate effect to assert
   });
 
-  it("RLM feedback calls 'suggest feedback' (not 'prompts append-feedback')", async () => {
+  it("RLM feedback calls 'suggest rlm-feedback' (not 'prompts append-feedback')", async () => {
     // Disable dry-run so exec sage actually invokes $
     process.env.SAGE_PLUGIN_DRY_RUN = "";
     process.env.SAGE_RLM_FEEDBACK = "1";
@@ -416,10 +416,11 @@ describe("SagePlugin", () => {
       },
     });
 
-    // Check that any calls to $ containing "feedback" use "suggest feedback", not "prompts append-feedback"
+    // Check that any calls to $ containing "feedback" use "suggest rlm-feedback", not "prompts append-feedback"
     const feedbackCalls = $mock.calls.filter((c) => c.cmd.includes("feedback"));
     for (const call of feedbackCalls) {
       expect(call.cmd).toContain("suggest");
+      expect(call.cmd).toContain("rlm-feedback");
       expect(call.cmd).not.toContain("append-feedback");
       expect(call.cmd).not.toContain("prompts");
     }
